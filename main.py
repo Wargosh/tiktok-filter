@@ -3,7 +3,7 @@
 Uso:
   python main.py check      Verifica que el Android esta conectado.
   python main.py inspect    Guarda captura + estructura de la pantalla actual (para calibrar).
-  python main.py run        Recorre el ranking abierto y guarda Excel + txt en output/.
+  python main.py run [N]    Recorre (N = cuantos puestos, por defecto 100) el ranking abierto y guarda Excel + txt en output/.
 """
 import sys
 
@@ -22,6 +22,8 @@ def main():
         device.dump_screen(d, sys.argv[2] if len(sys.argv) > 2 else "inspect")
         return
     if cmd == "run":
+        if len(sys.argv) > 2:
+            cfg["target_count"] = int(sys.argv[2])
         results = ranking.scrape(d, cfg)
         export.save(results)
         missing = sum(1 for r in results if not r["username"])

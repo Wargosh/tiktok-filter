@@ -15,9 +15,9 @@ def save(results):
     wb = Workbook()
     ws = wb.active
     ws.title = "Ranking"
-    ws.append(["Puesto", "Nombre visible", "Username"])
+    ws.append(["Puesto", "Nombre visible", "Username", "Puntos"])
     for r in results:
-        ws.append([r["puesto"], r["nombre_visible"], r["username"]])
+        ws.append([r["puesto"], r["nombre_visible"], r["username"], r.get("puntos", "")])
     wb.save(xlsx)
 
     txt.write_text("\n".join(r["username"] for r in results if r["username"]), encoding="utf-8")

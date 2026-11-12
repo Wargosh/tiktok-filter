@@ -1,83 +1,233 @@
-"""Recorre el ranking diario abierto en pantalla y obtiene el @username de cada puesto.
+"""Recorre el ranking de liga (TikTok LIVE) abierto en pantalla y obtiene el @username de cada puesto.
 
-Flujo: el usuario (o un paso previo) deja abierto el ranking diario de la liga.
-Por cada fila visible: tocar -> leer @username en la tarjeta/perfil -> volver.
-Cuando se acaban las filas visibles, hace scroll y sigue hasta llegar a target_count.
+Pantalla esperada: un LIVE con la hoja "Daily Ranking" abierta en la pestaña "League DX".
+Por cada fila: tocar -> se abre la tarjeta del usuario -> leer el username (debajo del nombre)
+-> atras -> siguiente. Cuando se acaban las filas visibles, scroll dentro de la lista.
+
+Se lee la jerarquia de la UI (no OCR) y se evita depender de ids ofuscados de TikTok:
+solo se usa el id estable "user_name" y el texto "followers"/"seguidores" de la tarjeta.
 """
 import re
+import xml.etree.ElementTree as ET
 
 from .device import dump_screen, sleep
 
-USERNAME_RE = re.compile(r"@?([A-Za-z0-9._]{2,24})")
+BOUNDS_RE = re.compile(r"\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]")
+FOLLOWERS_RE = re.compile(r"(followers|seguidores)", re.I)
 
 
-def _visible_rows(d, sel):
-    rows = d(**sel["ranking_row"])
-    return [rows[i] for i in range(rows.count)] if rows.exists else []
+def _bounds(node):
+    m = BOUNDS_RE.match(node.attrib.get("bounds", ""))
+    return tuple(map(int, m.groups())) if m else (0, 0, 0, 0)
 
 
-def _row_key(row, sel):
-    """Identificador de la fila (nombre visible + puesto) para no repetirla tras el scroll."""
-    pos, name = "", ""
-    try:
-        p = row.child(**sel["row_position"])
-        if p.exists:
-            pos = p.get_text() or ""
-        n = row.child(**sel["row_display_name"])
-        if n.exists:
-            name = n.get_text() or ""
-    except Exception:
-        pass
-    return pos.strip(), name.strip()
+def _rid(node):
+    return node.attrib.get("resource-id", "").split("/")[-1]
 
 
-def _read_username(d, sel, timeout=4):
-    el = d(**sel["profile_username"])
-    if el.wait(timeout=timeout):
-        m = USERNAME_RE.search(el.get_text() or "")
-        if m:
-            return m.group(1)
+def _tree(d):
+    return ET.fromstring(d.dump_hierarchy(compressed=False))
+
+
+def _ranking_list(root):
+    """RecyclerView scrollable que contiene filas con user_name."""
+    for n in root.iter("node"):
+        if n.attrib.get("scrollable") == "true" and "RecyclerView" in n.attrib.get("class", ""):
+            if any(_rid(c) == "user_name" for c in n.iter("node")):
+                return n
     return None
 
 
+def _rows(root):
+    """Devuelve filas visibles: puesto, nombre visible, puntos y centro para tocar."""
+    lst = _ranking_list(root)
+    if lst is None:
+        return [], None
+    lb = _bounds(lst)
+    rows = []
+    for row in lst:
+        texts = [(n.attrib.get("text", ""), _rid(n), _bounds(n)) for n in row.iter("node")]
+        name = next((t for t, r, _ in texts if r == "user_name"), None)
+        if name is None:
+            continue
+        pos = next((t for t, r, b in texts if t.strip().isdigit() and b[0] < 150), "")
+        score = next((t for t, r, b in texts if b[0] > 850 and t.strip()), "")
+        x1, y1, x2, y2 = _bounds(row)
+        # solo filas completamente dentro de la lista visible
+        if y1 < lb[1] or y2 > lb[3]:
+            continue
+        rows.append({"puesto": pos.strip(), "nombre_visible": name.strip(), "puntos": score.strip(),
+                     "tap": ((x1 + x2) // 2, (y1 + y2) // 2)})
+    return rows, lb
+
+
+def _find(root, pred):
+    return next((n for n in root.iter("node") if pred(n)), None)
+
+
+def _center(node):
+    x1, y1, x2, y2 = _bounds(node)
+    return (x1 + x2) // 2, (y1 + y2) // 2
+
+
+def _card_username(root):
+    """Username de la tarjeta de usuario (texto user_name justo encima de 'followers')."""
+    fol = _find(root, lambda n: FOLLOWERS_RE.search(n.attrib.get("text", "")))
+    if fol is None:
+        return None
+    ftop = _bounds(fol)[1]
+    cands = [n for n in root.iter("node")
+             if _rid(n) == "user_name" and ftop - 350 < _bounds(n)[3] <= ftop]
+    if not cands:
+        return None
+    return cands[-1].attrib.get("text", "").strip().lstrip("@") or None
+
+
+def _ranking_entrance(root):
+    return _find(root, lambda n: _rid(n) == "tv_ranking_entrance_text")
+
+
+def _host_block(root):
+    """Bloque del anfitrion arriba a la izquierda del LIVE (contiene user_name)."""
+    name = _find(root, lambda n: _rid(n) == "user_name" and _bounds(n)[1] < 400)
+    return name
+
+
+def _wait_state(d, timeout=6.0):
+    """Espera hasta reconocer la pantalla: 'card', 'list' o 'live'."""
+    waited = 0.0
+    root = None
+    while waited <= timeout:
+        root = _tree(d)
+        if _card_username(root):
+            return "card", root
+        if _ranking_list(root) is not None and waited > 2.5:
+            return "list", root
+        if _ranking_entrance(root) is not None and _ranking_list(root) is None and waited > 2.0:
+            return "live", root
+        sleep(0.5)
+        waited += 0.5
+    return "unknown", root
+
+
+def select_league_tab(d):
+    """En la hoja de ranking, toca la pestana 'League ...' si existe."""
+    root = _tree(d)
+    tab = _find(root, lambda n: n.attrib.get("text", "").strip().startswith(("League", "Liga"))
+                and 900 < _bounds(n)[1] < 1300)
+    if tab is not None:
+        d.click(*_center(tab))
+        sleep(1.5)
+        return True
+    return False
+
+
+def reopen_ranking(d):
+    """Desde un LIVE, abre la hoja de ranking y la pestana de liga."""
+    for _ in range(3):
+        root = _tree(d)
+        ent = _ranking_entrance(root)
+        if ent is not None:
+            d.click(*_center(ent))
+            sleep(2.0)
+            select_league_tab(d)
+            if _ranking_list(_tree(d)) is not None:
+                return True
+        sleep(1.0)
+    return False
+
+
+def _username_from_live(d, root):
+    """Estamos dentro del LIVE del usuario: toca al anfitrion y lee su username de la tarjeta."""
+    host = _host_block(root)
+    if host is None:
+        return None
+    d.click(*_center(host))
+    sleep(1.5)
+    state, root2 = _wait_state(d, timeout=4)
+    username = _card_username(root2) if state == "card" else None
+    if state == "card":
+        d.press("back")
+        sleep(1.0)
+    return username
+
+
+def scroll_to_top(d, max_swipes=40):
+    """Sube la lista hasta que se vea el puesto 1."""
+    for _ in range(max_swipes):
+        rows, lb = _rows(_tree(d))
+        if lb is None:
+            return False
+        if any(r["puesto"] == "1" for r in rows):
+            return True
+        x = (lb[0] + lb[2]) // 2
+        d.swipe(x, lb[1] + 60, x, lb[3] - 60, duration=0.25)
+        sleep(0.6)
+    return False
+
+
 def scrape(d, cfg):
-    sel = cfg["selectors"]
     target = cfg["target_count"]
     results, seen = [], set()
-    scrolls = 0
+    stale_scrolls = 0
+    select_league_tab(d)
+    scroll_to_top(d)
 
-    while len(results) < target and scrolls <= cfg["max_scrolls"]:
-        new_in_screen = 0
-        for row in _visible_rows(d, sel):
-            key = _row_key(row, sel)
-            if key in seen or key == ("", ""):
+    while len(results) < target and stale_scrolls < 3:
+        rows, lb = _rows(_tree(d))
+        if lb is None:
+            if reopen_ranking(d):
                 continue
-            seen.add(key)
-            new_in_screen += 1
+            dump_screen(d, "sin_lista")
+            print("No encuentro la lista del ranking en pantalla. Abre 'Daily Ranking' > 'League' y reintenta.")
+            break
 
-            row.click()
+        rows = [r for r in rows if r["puesto"]]
+        new_rows = [r for r in rows if (r["puesto"], r["nombre_visible"]) not in seen]
+        last_pos = max((int(r["puesto"]) for r in rows), default=0)
+        max_seen = max((int(p) for p, _ in seen), default=0)
+
+        if not new_rows and last_pos >= max_seen and rows:
+            stale_scrolls += 1
+        else:
+            stale_scrolls = 0
+
+        lost_list = False
+        for r in new_rows:
+            seen.add((r["puesto"], r["nombre_visible"]))
+            d.click(*r["tap"])
             sleep(cfg["tap_delay_sec"])
-            username = _read_username(d, sel)
+            state, root = _wait_state(d)
+            username = None
+            if state == "card":
+                username = _card_username(root)
+                d.press("back")
+                sleep(cfg["back_delay_sec"])
+            elif state == "live":
+                username = _username_from_live(d, root)
+                lost_list = True
             if not username:
-                dump_screen(d, f"sin_username_{len(results)+1}")
-            results.append({
-                "puesto": key[0] or str(len(results) + 1),
-                "nombre_visible": key[1],
-                "username": username or "",
-            })
-            print(f"{len(results):>3}. {key[1]!r} -> @{username}")
-            d.press("back")
-            sleep(cfg["back_delay_sec"])
-            if len(results) >= target:
+                dump_screen(d, f"sin_username_{r['puesto']}")
+            r["username"] = username or ""
+            results.append({k: r[k] for k in ("puesto", "nombre_visible", "username", "puntos")})
+            print(f"{r['puesto']:>3}. {r['nombre_visible']!r} -> @{username}  [{state}]")
+            if len(results) >= target or lost_list or state == "unknown":
                 break
 
         if len(results) >= target:
             break
-        d.swipe_ext("up", scale=0.6)
+        if lost_list or state == "unknown":
+            if not reopen_ranking(d):
+                dump_screen(d, "no_reabre")
+                print("No pude volver a abrir el ranking.")
+                break
+            continue
+        # scroll dentro de la lista (de abajo hacia arriba)
+        x = (lb[0] + lb[2]) // 2
+        d.swipe(x, lb[3] - 60, x, lb[1] + 60, duration=0.4)
         sleep(cfg["scroll_delay_sec"])
-        scrolls += 1
-        if new_in_screen == 0 and scrolls > 3:
-            print("No aparecen filas nuevas; fin de la lista o selectores incorrectos.")
-            break
 
+    if stale_scrolls >= 3:
+        print("No aparecen filas nuevas: fin de la lista.")
+    results.sort(key=lambda r: int(r["puesto"]) if r["puesto"].isdigit() else 999)
     return results
