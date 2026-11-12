@@ -1,0 +1,15 @@
+{
+  "device_serial": null,
+  "app_package": "com.zhiliaoapp.musically",
+  "target_count": 100,
+  "tap_delay_sec": 1.5,
+  "back_delay_sec": 1.0,
+  "scroll_delay_sec": 1.2,
+  "max_scrolls": 60,
+  "selectors": {
+    "ranking_row": {"resourceIdMatches": ".*rank.*item.*"},
+    "row_position": {"resourceIdMatches": ".*rank.*(num|index).*"},
+    "row_display_name": {"resourceIdMatches": ".*(nick|name).*"},
+    "profile_username": {"textMatches": "^@[A-Za-z0-9._]{2,24}$"}
+  }
+}

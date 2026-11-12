@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+output/
+dumps/
+logs/
+config.json
+
+# Contenido previo no relacionado
+ACOP-main/
+ACOP-main.zip
