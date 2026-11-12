@@ -1,4 +1,4 @@
-# SAM · Extractor del ranking de ligas de TikTok LIVE
+# tiktok-filter — Extractor del ranking de ligas de TikTok LIVE (proyecto SAM)
 
 Saca los **@username reales** de los usuarios del ranking diario de una liga de TikTok LIVE
 (por ejemplo "League D5", unos 100 puestos) y los guarda en Excel y `.txt`.
@@ -31,7 +31,7 @@ lee su @username, vuelve atrás y baja la lista.
 ## 3. Instalación (una sola vez)
 
 ```powershell
-cd D:\USUARIO\Documentos\Workspace\SAM\extractor
+cd D:\USUARIO\Documentos\Workspace\SAM\tiktok-filter
 python -m venv .venv
 .venv\Scripts\activate          # Mac/Linux: source .venv/bin/activate
 pip install -r requirements.txt
