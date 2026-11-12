@@ -255,6 +255,8 @@ def _scrape(d, cfg, league, results):
         rows, lb = _rows(_tree(d))
         if lb is None:
             if reopen_ranking(d):
+                if not seen:
+                    scroll_to_top(d)
                 continue
             dump_screen(d, "sin_lista")
             print("No encuentro la lista del ranking en pantalla. Abre 'Daily Ranking' > 'League' y reintenta.")
