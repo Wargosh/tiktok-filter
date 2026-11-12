@@ -110,6 +110,56 @@ def _wait_state(d, timeout=6.0):
     return "unknown", root
 
 
+LEAGUE_RE = re.compile(r"(?:League|Liga)\s*([A-Z]\d)", re.I)
+
+
+def current_league(d=None, root=None):
+    """Devuelve la liga de la pestana del ranking abierto (ej. 'D5') o None."""
+    root = root if root is not None else _tree(d)
+    for n in root.iter("node"):
+        m = LEAGUE_RE.search(n.attrib.get("text", ""))
+        if m and 900 < _bounds(n)[1] < 1300:
+            return m.group(1).upper()
+    return None
+
+
+def _close_sheet(d):
+    """Cierra la hoja del ranking tocando sobre el video, encima de la hoja."""
+    d.click(540, 450)
+    sleep(1.0)
+
+
+def find_league(d, target, max_lives=80):
+    """Desde un LIVE, pasa de LIVE en LIVE hasta encontrar uno cuya liga sea `target`
+    y deja abierto su ranking en la pestana de liga."""
+    target = target.upper()
+    for i in range(max_lives):
+        root = _tree(d)
+        if _ranking_list(root) is not None:
+            lg = current_league(root=root)
+            print(f"  LIVE {i+1}: liga {lg}")
+            if lg == target:
+                return True
+            _close_sheet(d)
+            root = _tree(d)
+        ent = _ranking_entrance(root)
+        if ent is not None:
+            pill = ent.attrib.get("text", "")
+            m = LEAGUE_RE.search(pill)
+            if m and m.group(1).upper() != target:
+                print(f"  LIVE {i+1}: liga {m.group(1).upper()}")
+            else:
+                d.click(*_center(ent))
+                sleep(2.0)
+                select_league_tab(d)
+                continue
+        # siguiente LIVE
+        d.swipe(540, 1700, 540, 500, duration=0.3)
+        sleep(3.0)
+    print(f"No encontre un LIVE de la liga {target} en {max_lives} intentos.")
+    return False
+
+
 def select_league_tab(d):
     """En la hoja de ranking, toca la pestana 'League ...' si existe."""
     root = _tree(d)
@@ -166,8 +216,11 @@ def scroll_to_top(d, max_swipes=40):
     return False
 
 
-def scrape(d, cfg):
+def scrape(d, cfg, league=None):
     target = cfg["target_count"]
+    if league:
+        if current_league(d) != league.upper() and not find_league(d, league, cfg.get("max_lives_search", 80)):
+            return []
     results, seen = [], set()
     stale_scrolls = 0
     select_league_tab(d)
