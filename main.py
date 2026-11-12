@@ -4,11 +4,17 @@ Uso:
   python main.py check      Verifica que el Android esta conectado.
   python main.py liga       Muestra la liga del ranking abierto.
   python main.py inspect    Guarda captura + estructura de la pantalla actual (para calibrar).
-  python main.py run [N] [--liga D5]\n                            Recorre el ranking (N puestos, por defecto 100). Con --liga busca\n                            un LIVE de esa liga si el ranking abierto es de otra. el ranking abierto y guarda Excel + txt en output/.
+  python main.py run [N] [--liga D5]
+                            Recorre el ranking (N puestos, por defecto 100) y guarda Excel + txt
+                            en output/. Con --liga busca un LIVE de esa liga si el abierto es de otra.
+
+Todos los toques pasan por sam/guard.py: si TikTok no esta al frente (llamada, otra app,
+notificacion encima) el script espera y vuelve a TikTok antes de seguir.
 """
 import sys
 
 from sam import device, export, ranking
+from sam.guard import SafeDevice, NotInTikTok
 from sam.config import load_config
 
 
@@ -34,8 +40,17 @@ def main():
             args = args[:i] + args[i + 2:]
         if args:
             cfg["target_count"] = int(args[0])
-        results = ranking.scrape(d, cfg, league)
-        lg = ranking.current_league(d) or league or "liga"
+        sd = SafeDevice(d, cfg.get("max_wait_outside_sec", 900))
+        try:
+            sd.ensure_tiktok()
+        except NotInTikTok as e:
+            print(e)
+            return
+        results = ranking.scrape(sd, cfg, league)
+        try:
+            lg = ranking.current_league(d) or league or "liga"
+        except Exception:
+            lg = league or "liga"
         export.save(results, lg)
         missing = sum(1 for r in results if not r["username"])
         print(f"Listo: {len(results)} filas, {missing} sin username.")

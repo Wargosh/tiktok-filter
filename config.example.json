@@ -4,5 +4,6 @@
   "tap_delay_sec": 1.5,
   "back_delay_sec": 1.2,
   "scroll_delay_sec": 1.2,
-  "max_lives_search": 80
+  "max_lives_search": 80,
+  "max_wait_outside_sec": 900
 }

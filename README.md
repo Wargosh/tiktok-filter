@@ -123,6 +123,16 @@ Por eso el script solo usa ids estables y textos:
 | `back_delay_sec` | `1.2` | Espera después de cerrar la tarjeta |
 | `scroll_delay_sec` | `1.2` | Espera después de cada scroll |
 | `max_lives_search` | `80` | LIVEs que prueba al buscar una liga |
+| `max_wait_outside_sec` | `900` | Cuánto espera (s) a que TikTok vuelva al frente antes de rendirse y guardar lo extraído |
+
+### Protección contra llamadas y notificaciones (`sam/guard.py`)
+Todos los toques, swipes y "atrás" pasan por `SafeDevice`, que antes de cada acción:
+1. Revisa si hay una **llamada** sonando o en curso (`dumpsys telephony.registry`). Si la hay, espera sin tocar nada (así nunca contesta ni cuelga).
+2. Revisa que la app al frente sea **TikTok** (`com.zhiliaoapp.musically`). Si no, espera 3 s y la vuelve a abrir con `app_start` (sin reiniciarla).
+3. Revisa que el punto a tocar no esté tapado por un elemento de **otra app** (notificación flotante, diálogo). Si lo está, espera a que desaparezca; si sigue después de 20 s, no toca.
+
+Si hubo una interrupción, la fila en curso se reintenta una vez y el ranking se vuelve a abrir. Si no logra volver a TikTok en `max_wait_outside_sec`, se detiene y **guarda lo extraído hasta ese momento**.
+Recomendado igual: activar **No molestar** en el celular mientras corre.
 
 Una corrida de 100 tarda unos 8 minutos. Para que sea menos notorio, se recomienda correrlo **cada 3 o 4 horas**.
 
@@ -135,10 +145,13 @@ Una corrida de 100 tarda unos 8 minutos. Para que sea menos notorio, se recomien
 | Empieza en un puesto que no es el 1 | Se corrige solo con `scroll_to_top()`. Si falla, subir la lista a mano |
 | Muchos `sin_username` | TikTok cambió la UI. Correr `inspect`, revisar el xml en `dumps/` y ajustar `sam/ranking.py` (sección 5) |
 | Termina en un LIVE de otra liga | Pasa si se usó `back` dentro de un LIVE. Volver a la liga a mano o usar `--liga` |
+| Salen líneas `[guard] ...` | Hubo una llamada, notificación u otra app al frente; el script esperó y volvió a TikTok |
+| Usernames repetidos | Ya no deberían salir: se deduplica por puesto y por username |
 | Emojis como `..` en la consola | Es solo la consola. En el Excel salen bien. Usar `PYTHONIOENCODING=utf-8` |
 
 ## 8. Pendiente / ideas
-- [ ] Probar la corrida completa de 100 con usuarios en LIVE y la búsqueda `--liga`
+- [x] Corrida completa de 100 con usuarios en LIVE y búsqueda `--liga D5` (2026-11-12: 100 filas, 0 sin username, ~12 min)
+- [ ] Probar la protección `guard.py` con una llamada / notificación real
 - [ ] Programar la ejecución cada 3-4 horas (Programador de tareas de Windows)
 - [ ] Guardar un historial (cada corrida en una hoja nueva o en una base de datos) y quitar duplicados entre corridas
 - [ ] Lista de creadores de referencia por liga, para encontrar más rápido un LIVE de una liga específica

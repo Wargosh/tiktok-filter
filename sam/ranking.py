@@ -11,6 +11,7 @@ import re
 import xml.etree.ElementTree as ET
 
 from .device import dump_screen, sleep
+from .guard import NotInTikTok
 
 BOUNDS_RE = re.compile(r"\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]")
 FOLLOWERS_RE = re.compile(r"(followers|seguidores)", re.I)
@@ -176,6 +177,8 @@ def reopen_ranking(d):
     """Desde un LIVE, abre la hoja de ranking y la pestana de liga."""
     for _ in range(3):
         root = _tree(d)
+        if _ranking_list(root) is not None:
+            return True
         ent = _ranking_entrance(root)
         if ent is not None:
             d.click(*_center(ent))
@@ -217,11 +220,22 @@ def scroll_to_top(d, max_swipes=40):
 
 
 def scrape(d, cfg, league=None):
+    """Envuelve _scrape: si se pierde TikTok sin poder volver, devuelve lo ya extraido."""
+    results = []
+    try:
+        _scrape(d, cfg, league, results)
+    except NotInTikTok as e:
+        print(f"Detenido: {e} Se guarda lo extraido hasta ahora.")
+    results.sort(key=lambda r: int(r["puesto"]) if r["puesto"].isdigit() else 999)
+    return results
+
+
+def _scrape(d, cfg, league, results):
     target = cfg["target_count"]
     if league:
         if current_league(d) != league.upper() and not find_league(d, league, cfg.get("max_lives_search", 80)):
-            return []
-    results, seen = [], set()
+            return
+    seen, attempts, got_users = [], set(), {}, {}
     stale_scrolls = 0
     select_league_tab(d)
     scroll_to_top(d)
@@ -236,9 +250,10 @@ def scrape(d, cfg, league=None):
             break
 
         rows = [r for r in rows if r["puesto"]]
-        new_rows = [r for r in rows if (r["puesto"], r["nombre_visible"]) not in seen]
+        # el puesto es unico; el nombre visible puede variar entre lecturas (emojis)
+        new_rows = [r for r in rows if r["puesto"] not in seen]
         last_pos = max((int(r["puesto"]) for r in rows), default=0)
-        max_seen = max((int(p) for p, _ in seen), default=0)
+        max_seen = max((int(p) for p in seen), default=0)
 
         if not new_rows and last_pos >= max_seen and rows:
             stale_scrolls += 1
@@ -246,8 +261,8 @@ def scrape(d, cfg, league=None):
             stale_scrolls = 0
 
         lost_list = False
+        state = "list"
         for r in new_rows:
-            seen.add((r["puesto"], r["nombre_visible"]))
             d.click(*r["tap"])
             sleep(cfg["tap_delay_sec"])
             state, root = _wait_state(d)
@@ -259,6 +274,24 @@ def scrape(d, cfg, league=None):
             elif state == "live":
                 username = _username_from_live(d, root)
                 lost_list = True
+            interrupted = getattr(d, "recovered", False)
+            if interrupted:
+                d.recovered = False
+                state = "unknown"
+            attempts[r["puesto"]] = attempts.get(r["puesto"], 0) + 1
+            if not username and attempts[r["puesto"]] < 2:
+                # reintento: no se marca como visto
+                print(f"{r['puesto']:>3}. {r['nombre_visible']!r} -> fallo, reintento luego  [{state}]")
+                if state == "card":
+                    state = "unknown"
+                break
+            if username and username in got_users:
+                print(f"{r['puesto']:>3}. @{username} ya estaba (puesto {got_users[username]}), se omite")
+                seen.add(r["puesto"])
+                continue
+            seen.add(r["puesto"])
+            if username:
+                got_users[username] = r["puesto"]
             if not username:
                 dump_screen(d, f"sin_username_{r['puesto']}")
             r["username"] = username or ""
@@ -282,5 +315,3 @@ def scrape(d, cfg, league=None):
 
     if stale_scrolls >= 3:
         print("No aparecen filas nuevas: fin de la lista.")
-    results.sort(key=lambda r: int(r["puesto"]) if r["puesto"].isdigit() else 999)
-    return results
