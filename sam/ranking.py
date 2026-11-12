@@ -235,7 +235,7 @@ def _scrape(d, cfg, league, results):
     if league:
         if current_league(d) != league.upper() and not find_league(d, league, cfg.get("max_lives_search", 80)):
             return
-    seen, attempts, got_users = [], set(), {}, {}
+    seen, attempts, got_users = set(), {}, {}
     stale_scrolls = 0
     select_league_tab(d)
     scroll_to_top(d)
