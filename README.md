@@ -70,6 +70,13 @@ La primera vez, `uiautomator2` instala sola una app auxiliar en el celular.
 
 En Windows conviene poner `$env:PYTHONIOENCODING="utf-8"` antes, para que los emojis se vean en la consola.
 
+**Forma fácil (con consola visible):** doble clic en `extraer.bat`, o desde una terminal `extraer.bat --liga D5`.
+Abre una ventana que muestra en vivo cada usuario extraído con su avance (`[37/100] ...`) y queda abierta al terminar.
+
+**Seguimiento / log:** cada corrida escribe `logs/<fecha_hora>_run_....log` en tiempo real, con la hora en cada línea.
+Para ver una corrida que se está ejecutando en segundo plano:
+`Get-Content logs\<archivo>.log -Wait -Tail 20` (PowerShell). Si la última línea tiene la hora actual, sigue trabajando.
+
 ### 4.3 Resultado
 En `output/`:
 - `ranking_<LIGA>_<AAAA-MM-DD_HHMM>.xlsx` con las columnas **Liga, Puesto, Nombre visible, Username, Puntos**.
@@ -146,7 +153,8 @@ Una corrida de 100 tarda unos 8 minutos. Para que sea menos notorio, se recomien
 | Muchos `sin_username` | TikTok cambió la UI. Correr `inspect`, revisar el xml en `dumps/` y ajustar `sam/ranking.py` (sección 5) |
 | Termina en un LIVE de otra liga | Pasa si se usó `back` dentro de un LIVE. Volver a la liga a mano o usar `--liga` |
 | Salen líneas `[guard] ...` | Hubo una llamada, notificación u otra app al frente; el script esperó y volvió a TikTok |
-| Usernames repetidos | Ya no deberían salir: se deduplica por puesto y por username |
+| Usernames repetidos | Se detecta como lectura de la tarjeta anterior y se reintenta el puesto (hasta 3 veces) |
+| Termina con 99 filas | El ranking de liga muestra hasta el puesto 99; es normal |
 | Emojis como `..` en la consola | Es solo la consola. En el Excel salen bien. Usar `PYTHONIOENCODING=utf-8` |
 
 ## 8. Pendiente / ideas

@@ -205,6 +205,17 @@ def _username_from_live(d, root):
     return username
 
 
+def _wait_card_closed(d, timeout=4.0):
+    """Espera a que la tarjeta se cierre, para no leer la tarjeta anterior en la fila siguiente."""
+    waited = 0.0
+    while waited < timeout:
+        if not _card_username(_tree(d)):
+            return True
+        sleep(0.5)
+        waited += 0.5
+    return False
+
+
 def scroll_to_top(d, max_swipes=40):
     """Sube la lista hasta que se vea el puesto 1."""
     for _ in range(max_swipes):
@@ -271,6 +282,7 @@ def _scrape(d, cfg, league, results):
                 username = _card_username(root)
                 d.press("back")
                 sleep(cfg["back_delay_sec"])
+                _wait_card_closed(d)
             elif state == "live":
                 username = _username_from_live(d, root)
                 lost_list = True
@@ -278,17 +290,17 @@ def _scrape(d, cfg, league, results):
             if interrupted:
                 d.recovered = False
                 state = "unknown"
+            if username and username in got_users:
+                # casi siempre es la tarjeta anterior leida otra vez: se trata como fallo
+                print(f"{r['puesto']:>3}. @{username} ya estaba (puesto {got_users[username]}), lectura repetida")
+                username = None
             attempts[r["puesto"]] = attempts.get(r["puesto"], 0) + 1
-            if not username and attempts[r["puesto"]] < 2:
+            if not username and attempts[r["puesto"]] < 3:
                 # reintento: no se marca como visto
                 print(f"{r['puesto']:>3}. {r['nombre_visible']!r} -> fallo, reintento luego  [{state}]")
                 if state == "card":
                     state = "unknown"
                 break
-            if username and username in got_users:
-                print(f"{r['puesto']:>3}. @{username} ya estaba (puesto {got_users[username]}), se omite")
-                seen.add(r["puesto"])
-                continue
             seen.add(r["puesto"])
             if username:
                 got_users[username] = r["puesto"]
@@ -296,7 +308,7 @@ def _scrape(d, cfg, league, results):
                 dump_screen(d, f"sin_username_{r['puesto']}")
             r["username"] = username or ""
             results.append({k: r[k] for k in ("puesto", "nombre_visible", "username", "puntos")})
-            print(f"{r['puesto']:>3}. {r['nombre_visible']!r} -> @{username}  [{state}]")
+            print(f"[{len(results)}/{target}] {r['puesto']:>3}. {r['nombre_visible']!r} -> @{username}  [{state}]")
             if len(results) >= target or lost_list or state == "unknown":
                 break
 
