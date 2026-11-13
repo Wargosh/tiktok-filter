@@ -146,12 +146,45 @@ def _close_sheet(d):
     return ok
 
 
+LIVE_ACTIVITY = "LivePlayActivity"
+FEED_LIVE_ICON = (77, 173)   # icono LIVE arriba a la izquierda del feed "Para ti"
+
+
+def _in_live(d):
+    try:
+        return LIVE_ACTIVITY in (d.app_current() or {}).get("activity", "")
+    except Exception:
+        return False
+
+
+def ensure_in_live(d, tries=4):
+    """Si no estamos dentro de un LIVE (p. ej. en el feed de videos normales),
+    entra por el icono LIVE de arriba a la izquierda. Devuelve True si quedo en un LIVE."""
+    for _ in range(tries):
+        if _in_live(d):
+            return True
+        act = (d.app_current() or {}).get("activity", "")
+        if "SplashActivity" in act or "MainActivity" in act:
+            print("  [live] no estoy en un LIVE: entro por el icono LIVE de arriba a la izquierda")
+            d.click(*FEED_LIVE_ICON)
+        else:
+            print(f"  [live] pantalla inesperada ({act.split('.')[-1]}): atras")
+            d.press("back")
+        sleep(5.0)
+    ok = _in_live(d)
+    if not ok:
+        print("  [live] no pude entrar a un LIVE")
+    return ok
+
+
 def find_league(d, target, max_lives=80):
     """Desde un LIVE, pasa de LIVE en LIVE hasta encontrar uno cuya liga sea `target`
     y deja abierto su ranking en la pestana de liga."""
     target = target.upper()
     opened_here = False
     for i in range(max_lives):
+        if not ensure_in_live(d):
+            return False
         root = _tree(d)
         if _ranking_list(root) is not None:
             lg = current_league(root=root)
@@ -178,9 +211,13 @@ def find_league(d, target, max_lives=80):
                 sleep(2.0)
                 select_league_tab(d)
                 continue
+        if ent is None:
+            print(f"  LIVE {i+1}: sin liga visible")
         # siguiente LIVE (nunca deslizar con una hoja abierta: moveria la lista)
         if _ranking_list(_tree(d)) is not None and not _close_sheet(d):
             continue
+        if not ensure_in_live(d):
+            return False
         d.swipe(540, 1700, 540, 500, duration=0.3)
         opened_here = False
         sleep(3.0)
