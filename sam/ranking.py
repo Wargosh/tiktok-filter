@@ -84,8 +84,16 @@ def _card_username(root):
     return cands[-1].attrib.get("text", "").strip().lstrip("@") or None
 
 
+DAILY_PILL_RE = re.compile(r"daily|diari|\\bno\\.|n[uú]m\\.|league|liga", re.I)
+
+
 def _ranking_entrance(root):
-    return _find(root, lambda n: _rid(n) == "tv_ranking_entrance_text")
+    """Pastilla del ranking. Prefiere la de liga ('Daily No. X' / 'Num. X' / 'League X');
+    si no hay, devuelve la pastilla generica (Popular LIVE, Gaming Ranking...)."""
+    daily = _find(root, lambda n: _bounds(n)[1] < 400 and n.attrib.get("text")
+                  and DAILY_PILL_RE.search(n.attrib.get("text", ""))
+                  and n.attrib.get("package") == "com.zhiliaoapp.musically")
+    return daily if daily is not None else _find(root, lambda n: _rid(n) == "tv_ranking_entrance_text")
 
 
 def _host_block(root):
@@ -184,6 +192,16 @@ def ensure_in_live(d, tries=4):
     return ok
 
 
+def _host_sig(d):
+    """Firma del LIVE actual: textos de la cabecera (anfitrion) arriba de y=280."""
+    try:
+        root = _tree(d)
+    except Exception:
+        return None
+    host = _find(root, lambda n: _rid(n) == "user_name" and _bounds(n)[1] < 280)
+    return host.attrib.get("text", "").strip() or None if host is not None else None
+
+
 def find_league(d, target, max_lives=80):
     """Desde un LIVE, pasa de LIVE en LIVE hasta encontrar uno cuya liga sea `target`
     y deja abierto su ranking en la pestana de liga."""
@@ -210,7 +228,7 @@ def find_league(d, target, max_lives=80):
             elif not m and opened_here:
                 # ya se abrio la hoja de este LIVE y no era de liga: no reabrir
                 pass
-            elif not m and not re.search(r"daily|diari|no\.", pill, re.I):
+            elif not m and not re.search(r"daily|diari|no\.|n[uú]m", pill, re.I):
                 # solo la pastilla "Daily No. X" lleva al ranking de liga
                 print(f"  LIVE {i+1}: sin liga ({pill.strip()[:30]})")
             else:
@@ -226,9 +244,23 @@ def find_league(d, target, max_lives=80):
             continue
         if not ensure_in_live(d):
             return False
+        before = _host_sig(d)
+        if before is None:
+            # dentro de un LIVE pero sin cabecera visible: hay un panel encima
+            print("  [aviso] hay un panel encima del LIVE; lo cierro con 'atras'")
+            d.press("back")
+            sleep(2.0)
+            if not ensure_in_live(d):
+                return False
+            before = _host_sig(d)
         d.swipe(540, 1700, 540, 500, duration=0.3)
         opened_here = False
         sleep(3.0)
+        if before and _host_sig(d) == before:
+            # no cambio de LIVE: hay alguna hoja/panel encima que se come el deslizar
+            print("  [aviso] el LIVE no cambio; cierro lo que este abierto con 'atras'")
+            d.press("back")
+            sleep(2.0)
     print(f"No encontre un LIVE de la liga {target} en {max_lives} intentos.")
     return False
 
