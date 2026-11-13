@@ -206,10 +206,18 @@ def _host_sig(d):
     return host.attrib.get("text", "").strip() or None if host is not None else None
 
 
+def _targets(target):
+    if isinstance(target, str):
+        target = target.split(",")
+    return {t.strip().upper() for t in target if t and t.strip()}
+
+
 def find_league(d, target, max_lives=80):
-    """Desde un LIVE, pasa de LIVE en LIVE hasta encontrar uno cuya liga sea `target`
-    y deja abierto su ranking en la pestana de liga."""
-    target = target.upper()
+    """Desde un LIVE, pasa de LIVE en LIVE hasta encontrar uno cuya liga este en `target`
+    (una liga o varias: 'C5' / 'C5,C4' / {'C5','C4'}). Deja abierto su ranking en la
+    pestana de liga y devuelve la liga encontrada (o None)."""
+    targets = _targets(target)
+    print(f"  Buscando liga: {', '.join(sorted(targets))}")
     opened_here = False
     for i in range(max_lives):
         if not ensure_in_live(d):
@@ -218,8 +226,9 @@ def find_league(d, target, max_lives=80):
         if _ranking_list(root) is not None:
             lg = current_league(root=root)
             print(f"  LIVE {i+1}: liga {lg}")
-            if lg == target:
-                return True
+            if lg in targets:
+                print(f"  >> Encontrada liga {lg}")
+                return lg
             if not _close_sheet(d):
                 continue
             root = _tree(d)
@@ -227,7 +236,7 @@ def find_league(d, target, max_lives=80):
         if ent is not None:
             pill = ent.attrib.get("text", "")
             m = LEAGUE_RE.search(pill)
-            if m and m.group(1).upper() != target:
+            if m and m.group(1).upper() not in targets:
                 print(f"  LIVE {i+1}: liga {m.group(1).upper()}")
             elif not m and opened_here:
                 # ya se abrio la hoja de este LIVE y no era de liga: no reabrir
@@ -265,8 +274,8 @@ def find_league(d, target, max_lives=80):
             print("  [aviso] el LIVE no cambio; cierro lo que este abierto con 'atras'")
             d.press("back")
             sleep(2.0)
-    print(f"No encontre un LIVE de la liga {target} en {max_lives} intentos.")
-    return False
+    print(f"No encontre un LIVE de las ligas {', '.join(sorted(targets))} en {max_lives} intentos.")
+    return None
 
 
 def select_league_tab(d):
@@ -338,6 +347,9 @@ def scroll_to_top(d, max_swipes=40):
     return False
 
 
+LAST_LEAGUE = None
+
+
 def scrape(d, cfg, league=None):
     """Envuelve _scrape: si se pierde TikTok sin poder volver, devuelve lo ya extraido."""
     results = []
@@ -350,10 +362,18 @@ def scrape(d, cfg, league=None):
 
 
 def _scrape(d, cfg, league, results):
+    global LAST_LEAGUE
+    LAST_LEAGUE = None
     target = cfg["target_count"]
     if league:
-        if current_league(d) != league.upper() and not find_league(d, league, cfg.get("max_lives_search", 80)):
-            return
+        targets = _targets(league)
+        cur = current_league(d)
+        if cur not in targets:
+            cur = find_league(d, targets, cfg.get("max_lives_search", 80))
+            if not cur:
+                return
+        LAST_LEAGUE = cur
+        print(f"== Extrayendo liga {cur} ==")
     seen, attempts, got_users = set(), {}, {}
     stale_scrolls = 0
     select_league_tab(d)

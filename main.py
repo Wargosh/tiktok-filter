@@ -110,14 +110,35 @@ def main():
         except NotInTikTok as e:
             print(e)
             return
-        results = ranking.scrape(sd, cfg, league)
-        try:
-            lg = ranking.current_league(d) or league or "liga"
-        except Exception:
-            lg = league or "liga"
-        export.save(results, lg)
-        missing = sum(1 for r in results if not r["username"])
-        print(f"Listo: {len(results)} filas, {missing} sin username.  Fin: {datetime.now():%H:%M:%S}")
+        # --liga acepta varias separadas por coma: se extrae cada una en cuanto
+        # aparece un LIVE de cualquiera de ellas, hasta completar todas.
+        pending = [x.strip().upper() for x in league.split(",") if x.strip()] if league else [None]
+        done = []
+        while pending:
+            want = ",".join(pending) if pending[0] else None
+            results = ranking.scrape(sd, cfg, want)
+            lg = ranking.LAST_LEAGUE
+            if not lg:
+                try:
+                    lg = ranking.current_league(d)
+                except Exception:
+                    lg = None
+            if league and (not lg or lg not in pending or not results):
+                print(f"No pude extraer ninguna de: {', '.join(pending)}")
+                break
+            export.save(results, lg or "liga")
+            missing = sum(1 for r in results if not r["username"])
+            print(f"Listo {lg or ''}: {len(results)} filas, {missing} sin username.  {datetime.now():%H:%M:%S}")
+            done.append(lg)
+            if not league:
+                break
+            pending.remove(lg)
+            if pending:
+                print(f"Faltan: {', '.join(pending)}")
+        if league:
+            print(f"Ligas extraidas: {', '.join(done) or 'ninguna'}"
+                  + (f"  |  sin extraer: {', '.join(pending)}" if pending else ""))
+        print(f"Fin: {datetime.now():%H:%M:%S}")
         return
     print(__doc__)
 
