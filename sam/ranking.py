@@ -84,7 +84,7 @@ def _card_username(root):
     return cands[-1].attrib.get("text", "").strip().lstrip("@") or None
 
 
-DAILY_PILL_RE = re.compile(r"daily|diari|\\bno\\.|n[uú]m\\.|league|liga", re.I)
+DAILY_PILL_RE = re.compile(r"daily|diari|\bno\.|n[uú]m\.|league|liga", re.I)
 
 
 def _ranking_entrance(root):
