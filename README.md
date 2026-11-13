@@ -1,4 +1,4 @@
-# tiktok-filter — Extractor del ranking de ligas de TikTok LIVE (proyecto SAM)
+﻿# tiktok-filter — Extractor del ranking de ligas de TikTok LIVE (proyecto SAM)
 
 Saca los **@username reales** de los usuarios del ranking diario de una liga de TikTok LIVE
 (por ejemplo "League D5", unos 100 puestos) y los guarda en Excel y `.txt`.
@@ -69,6 +69,8 @@ La primera vez, `uiautomator2` instala sola una app auxiliar en el celular.
 | `python main.py inspect nombre` | Guarda una captura y la jerarquía de la UI en `dumps/` (para depurar o calibrar) |
 
 En Windows conviene poner `$env:PYTHONIOENCODING="utf-8"` antes, para que los emojis se vean en la consola.
+
+**Ventana de seguimiento:** cada vez que corre `main.py run` (aunque se lance sin el .bat, p. ej. desde el Programador de tareas) se abre sola una ventana *tiktok-filter - seguimiento* (`seguir.ps1`) que muestra el log en vivo y salta al log de cada corrida nueva. Si ya hay una abierta no se abre otra.
 
 **Forma fácil (con consola visible):** doble clic en `extraer.bat`, o desde una terminal `extraer.bat --liga D5`.
 Abre una ventana que muestra en vivo cada usuario extraído con su avance (`[37/100] ...`) y queda abierta al terminar.

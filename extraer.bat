@@ -6,6 +6,7 @@ title tiktok-filter %*
 set "PATH=%PATH%;D:\USUARIO\Nueva carpeta - copia\platform-tools"
 set PYTHONIOENCODING=utf-8
 set PYTHONUNBUFFERED=1
+set TIKTOK_FILTER_CONSOLE=1
 .venv\Scripts\python.exe main.py run %*
 echo.
 echo Terminado. Puedes cerrar esta ventana.

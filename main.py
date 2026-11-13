@@ -45,6 +45,29 @@ def _setup_log(name):
     sys.stderr = _Tee(sys.stderr, path)
     print(f"Log: {path}")
 
+
+def _open_watch():
+    """Abre la ventana de seguimiento (seguir.ps1) si no hay una abierta ya."""
+    import os, subprocess
+    if os.name != "nt" or os.environ.get("TIKTOK_FILTER_CONSOLE") == "1":
+        return
+    root = Path(__file__).parent
+    pidf = root / "logs" / ".watch.pid"
+    try:
+        pid = int(pidf.read_text().strip())
+        out = subprocess.run(["tasklist", "/FI", f"PID eq {pid}", "/NH"],
+                             capture_output=True, text=True).stdout
+        if str(pid) in out:
+            return
+    except Exception:
+        pass
+    try:
+        subprocess.Popen(["powershell", "-NoExit", "-ExecutionPolicy", "Bypass",
+                          "-File", str(root / "seguir.ps1")],
+                         creationflags=subprocess.CREATE_NEW_CONSOLE)
+    except Exception as e:
+        print(f"No pude abrir la ventana de seguimiento: {e}")
+
 from sam import device, export, ranking
 from sam.guard import SafeDevice, NotInTikTok
 from sam.config import load_config
@@ -59,6 +82,7 @@ def main():
         pass
     if cmd == "run":
         _setup_log("run_" + "_".join(a.lstrip("-") for a in sys.argv[2:]) if len(sys.argv) > 2 else "run")
+        _open_watch()
         print(f"Inicio: {datetime.now():%Y-%m-%d %H:%M:%S}  comando: {' '.join(sys.argv[1:])}")
     cfg = load_config()
     d = device.connect(cfg.get("device_serial"))
