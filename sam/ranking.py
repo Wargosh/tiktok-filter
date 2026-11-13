@@ -210,7 +210,7 @@ def find_league(d, target, max_lives=80):
             elif not m and opened_here:
                 # ya se abrio la hoja de este LIVE y no era de liga: no reabrir
                 pass
-            elif not m and not re.search(r"daily|diari|no\\.", pill, re.I):
+            elif not m and not re.search(r"daily|diari|no\.", pill, re.I):
                 # solo la pastilla "Daily No. X" lleva al ranking de liga
                 print(f"  LIVE {i+1}: sin liga ({pill.strip()[:30]})")
             else:
