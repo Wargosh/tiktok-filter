@@ -125,25 +125,32 @@ def current_league(d=None, root=None):
 
 
 def _close_sheet(d):
-    """Cierra la hoja del ranking. Primero toca el video encima de la hoja; si sigue
-    abierta, usa 'atras' (solo cuando hay hoja, asi no se sale del LIVE)."""
-    for attempt in range(3):
-        root = _tree(d)
-        lst = _ranking_list(root)
-        if lst is None:
+    """Cierra la hoja del ranking tocando el video encima de la hoja y esperando a que
+    termine la animacion. 'atras' solo como ultimo recurso y solo si la hoja sigue
+    visible de forma estable (si no, 'atras' saca del LIVE)."""
+    def _gone(wait):
+        t = 0.0
+        while t < wait:
+            sleep(0.5); t += 0.5
+            if _ranking_list(_tree(d)) is None:
+                return True
+        return False
+
+    lst = _ranking_list(_tree(d))
+    if lst is None:
+        return True
+    top = _bounds(lst)[1]
+    # arrastrar la hoja hacia abajo (tocar el video puede sacar del LIVE)
+    for _ in range(2):
+        d.swipe(540, top - 150, 540, 2300, duration=0.3)
+        if _gone(3.0):
             return True
-        top = _bounds(lst)[1]
-        # la cabecera de la hoja esta ~250px encima de la lista; tocar por encima
-        y = max(400, min(600, top - 400))
-        if attempt == 0:
-            d.click(540, y)
-        else:
-            d.press("back")
-        sleep(1.2)
-    ok = _ranking_list(_tree(d)) is None
-    if not ok:
-        print("  [aviso] no pude cerrar la hoja del ranking")
-    return ok
+    if _ranking_list(_tree(d)) is not None and _in_live(d):
+        d.press("back")
+        if _gone(3.0):
+            return True
+    print("  [aviso] no pude cerrar la hoja del ranking")
+    return False
 
 
 LIVE_ACTIVITY = "LivePlayActivity"
@@ -203,7 +210,8 @@ def find_league(d, target, max_lives=80):
             elif not m and opened_here:
                 # ya se abrio la hoja de este LIVE y no era de liga: no reabrir
                 pass
-            elif not m and re.search(r"gaming|popular|weekly|semanal|hourly", pill, re.I):
+            elif not m and not re.search(r"daily|diari|no\\.", pill, re.I):
+                # solo la pastilla "Daily No. X" lleva al ranking de liga
                 print(f"  LIVE {i+1}: sin liga ({pill.strip()[:30]})")
             else:
                 opened_here = True
