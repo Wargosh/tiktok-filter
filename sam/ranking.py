@@ -125,15 +125,32 @@ def current_league(d=None, root=None):
 
 
 def _close_sheet(d):
-    """Cierra la hoja del ranking tocando sobre el video, encima de la hoja."""
-    d.click(540, 450)
-    sleep(1.0)
+    """Cierra la hoja del ranking. Primero toca el video encima de la hoja; si sigue
+    abierta, usa 'atras' (solo cuando hay hoja, asi no se sale del LIVE)."""
+    for attempt in range(3):
+        root = _tree(d)
+        lst = _ranking_list(root)
+        if lst is None:
+            return True
+        top = _bounds(lst)[1]
+        # la cabecera de la hoja esta ~250px encima de la lista; tocar por encima
+        y = max(400, min(600, top - 400))
+        if attempt == 0:
+            d.click(540, y)
+        else:
+            d.press("back")
+        sleep(1.2)
+    ok = _ranking_list(_tree(d)) is None
+    if not ok:
+        print("  [aviso] no pude cerrar la hoja del ranking")
+    return ok
 
 
 def find_league(d, target, max_lives=80):
     """Desde un LIVE, pasa de LIVE en LIVE hasta encontrar uno cuya liga sea `target`
     y deja abierto su ranking en la pestana de liga."""
     target = target.upper()
+    opened_here = False
     for i in range(max_lives):
         root = _tree(d)
         if _ranking_list(root) is not None:
@@ -141,7 +158,8 @@ def find_league(d, target, max_lives=80):
             print(f"  LIVE {i+1}: liga {lg}")
             if lg == target:
                 return True
-            _close_sheet(d)
+            if not _close_sheet(d):
+                continue
             root = _tree(d)
         ent = _ranking_entrance(root)
         if ent is not None:
@@ -149,13 +167,22 @@ def find_league(d, target, max_lives=80):
             m = LEAGUE_RE.search(pill)
             if m and m.group(1).upper() != target:
                 print(f"  LIVE {i+1}: liga {m.group(1).upper()}")
+            elif not m and opened_here:
+                # ya se abrio la hoja de este LIVE y no era de liga: no reabrir
+                pass
+            elif not m and re.search(r"gaming|popular|weekly|semanal|hourly", pill, re.I):
+                print(f"  LIVE {i+1}: sin liga ({pill.strip()[:30]})")
             else:
+                opened_here = True
                 d.click(*_center(ent))
                 sleep(2.0)
                 select_league_tab(d)
                 continue
-        # siguiente LIVE
+        # siguiente LIVE (nunca deslizar con una hoja abierta: moveria la lista)
+        if _ranking_list(_tree(d)) is not None and not _close_sheet(d):
+            continue
         d.swipe(540, 1700, 540, 500, duration=0.3)
+        opened_here = False
         sleep(3.0)
     print(f"No encontre un LIVE de la liga {target} en {max_lives} intentos.")
     return False
