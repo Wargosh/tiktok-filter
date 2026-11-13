@@ -34,6 +34,10 @@ def _ranking_list(root):
     """RecyclerView scrollable que contiene filas con user_name."""
     for n in root.iter("node"):
         if n.attrib.get("scrollable") == "true" and "RecyclerView" in n.attrib.get("class", ""):
+            # la lista del ranking esta en una hoja (arranca abajo); el feed de LIVEs
+            # tambien es un RecyclerView a pantalla completa y no cuenta
+            if _bounds(n)[1] < 400:
+                continue
             if any(_rid(c) == "user_name" for c in n.iter("node")):
                 return n
     return None
@@ -149,7 +153,7 @@ def _close_sheet(d):
         return True
     top = _bounds(lst)[1]
     # arrastrar la hoja hacia abajo (tocar el video puede sacar del LIVE)
-    for _ in range(2):
+    for _ in range(2 if top - 150 >= 250 else 0):
         d.swipe(540, top - 150, 540, 2300, duration=0.3)
         if _gone(3.0):
             return True
