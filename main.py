@@ -11,6 +11,7 @@ Uso:
 Todos los toques pasan por sam/guard.py: si TikTok no esta al frente (llamada, otra app,
 notificacion encima) el script espera y vuelve a TikTok antes de seguir.
 """
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -37,6 +38,29 @@ class _Tee:
         self.f.flush()
 
 
+_LOCK = None
+
+
+def _single_instance():
+    """Candado del sistema: solo una extraccion a la vez. Se libera solo si el proceso
+    termina o se cae, asi que una ventana colgada que ya se cerro no bloquea nada."""
+    global _LOCK
+    path = Path(__file__).parent / "logs" / ".run.lock"
+    path.parent.mkdir(exist_ok=True)
+    _LOCK = open(path, "a+")
+    try:
+        if os.name == "nt":
+            import msvcrt
+            _LOCK.seek(0)
+            msvcrt.locking(_LOCK.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(_LOCK, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        return False
+    return True
+
+
 def _setup_log(name):
     logs = Path(__file__).parent / "logs"
     logs.mkdir(exist_ok=True)
@@ -44,6 +68,27 @@ def _setup_log(name):
     sys.stdout = _Tee(sys.stdout, path)
     sys.stderr = _Tee(sys.stderr, path)
     print(f"Log: {path}")
+    _watchdog(path)
+
+
+def _watchdog(path, idle_sec=150):
+    """Si el log no avanza en idle_sec, guarda en el log donde esta trabado el programa."""
+    import faulthandler, threading, time, os
+    def run():
+        dumped = 0.0
+        while True:
+            time.sleep(20)
+            try:
+                last = os.path.getmtime(path)
+            except OSError:
+                continue
+            if time.time() - last > idle_sec and last != dumped:
+                dumped = last
+                with open(path, "a", encoding="utf-8") as f:
+                    f.write(f"\n[watchdog] sin avance {idle_sec}s; pila actual:\n")
+                    f.flush()
+                    faulthandler.dump_traceback(file=f, all_threads=True)
+    threading.Thread(target=run, daemon=True).start()
 
 
 def _open_watch():
@@ -81,6 +126,12 @@ def main():
     except Exception:
         pass
     if cmd == "run":
+        if not _single_instance():
+            print("Ya hay otra extraccion corriendo con este celular. Cierra esa ventana")
+            print("o espera a que termine antes de abrir otra.")
+            if os.environ.get("TIKTOK_FILTER_CONSOLE") == "1":
+                input("Enter para cerrar...")
+            return
         _setup_log("run_" + "_".join(a.lstrip("-") for a in sys.argv[2:]) if len(sys.argv) > 2 else "run")
         _open_watch()
         print(f"Inicio: {datetime.now():%Y-%m-%d %H:%M:%S}  comando: {' '.join(sys.argv[1:])}")

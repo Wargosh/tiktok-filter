@@ -22,7 +22,7 @@ class NotInTikTok(Exception):
 
 def in_call(d):
     try:
-        out = d.shell("dumpsys telephony.registry").output
+        out = d.shell("dumpsys telephony.registry", timeout=10).output
     except Exception:
         return False
     return any(s != "0" for s in CALL_RE.findall(out))
@@ -37,7 +37,7 @@ def current_app(d):
     for cmd in ("dumpsys activity activities | grep -E 'topResumedActivity|ResumedActivity'",
                 "dumpsys window | grep -E 'mCurrentFocus|mFocusedApp'"):
         try:
-            out = d.shell(cmd).output
+            out = d.shell(cmd, timeout=10).output
         except Exception:
             continue
         m = TOP_RE.search(out)
