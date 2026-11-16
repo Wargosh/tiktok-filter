@@ -3,7 +3,7 @@ REM Abre una consola visible y corre el extractor mostrando el avance en vivo.
 REM Uso:  extraer.bat --liga D5      (o: extraer.bat 50 --liga C5)
 cd /d "%~dp0"
 title tiktok-filter %*
-set "PATH=%PATH%;D:\USUARIO\Nueva carpeta - copia\platform-tools"
+if exist "%~dp0tools\platform-tools\adb.exe" set "PATH=%~dp0tools\platform-tools;%PATH%"
 set PYTHONIOENCODING=utf-8
 set PYTHONUNBUFFERED=1
 set TIKTOK_FILTER_CONSOLE=1

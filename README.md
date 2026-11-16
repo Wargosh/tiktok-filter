@@ -24,14 +24,24 @@ lee su @username, vuelve atrás y baja la lista.
 | Qué | Detalle |
 |---|---|
 | PC | Windows (probado en Windows 10) o Mac, con Python 3.10 o superior |
-| ADB | [Android platform-tools](https://developer.android.com/tools/releases/platform-tools). En esta PC está en `D:\USUARIO\Nueva carpeta - copia\platform-tools` y en el PATH del usuario |
+| ADB | [Android platform-tools](https://developer.android.com/tools/releases/platform-tools). Si no está en el PATH, `instalar.bat` lo descarga solo en `tools\platform-tools` dentro del proyecto |
 | Android | Probado en un Redmi (`2209116AG`, 1080x2400). **Depuración USB** activada; en Xiaomi también "Depuración USB (ajustes de seguridad)" |
 | TikTok | Instalado y con sesión iniciada (mejor con una cuenta secundaria), en inglés o en español |
 
-## 3. Instalación (una sola vez)
+## 3. Instalación (una sola vez, en cualquier PC)
+
+**Forma fácil (Windows):** copia la carpeta del proyecto a cualquier ubicación de la otra PC (sin `.venv`, `output`, `logs`, `dumps`) y haz doble clic en `instalar.bat`. Este:
+1. busca Python 3.10+ (si no hay, te dice de dónde instalarlo),
+2. crea `.venv` e instala las dependencias,
+3. usa el `adb` del PATH o descarga Android platform-tools en `tools\platform-tools`,
+4. crea `config.json` y prueba la conexión con el celular (`main.py check`).
+
+No hay rutas fijas: todo se resuelve relativo a la carpeta donde está el proyecto.
+
+**Forma manual:**
 
 ```powershell
-cd D:\USUARIO\Documentos\Workspace\SAM\tiktok-filter
+cd <carpeta-donde-copiaste>\tiktok-filter
 python -m venv .venv
 .venv\Scripts\activate          # Mac/Linux: source .venv/bin/activate
 pip install -r requirements.txt
