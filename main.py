@@ -153,6 +153,21 @@ def main():
         _setup_log("run_" + "_".join(a.lstrip("-") for a in sys.argv[2:]) if len(sys.argv) > 2 else "run")
         _open_watch()
         print(f"Inicio: {datetime.now():%Y-%m-%d %H:%M:%S}  comando: {' '.join(sys.argv[1:])}")
+    if cmd == "rescatar":
+        # main.py rescatar [log]: recupera a Excel/txt lo extraido en un log (por defecto el ultimo)
+        from sam import respaldo
+        logs = sorted((Path(__file__).parent / "logs").glob("*.log"), key=lambda p: p.stat().st_mtime)
+        path = Path(sys.argv[2]) if len(sys.argv) > 2 else (logs[-1] if logs else None)
+        if not path:
+            print("No hay logs.")
+            return
+        for lg, rows in respaldo.from_log(path).items():
+            export.save(rows, f"{lg}_parcial")
+            if not respaldo.load(lg):
+                for r in rows:
+                    respaldo.append(lg, r)
+            print(f"{lg}: {len(rows)} usuarios rescatados de {path.name}")
+        return
     cfg = load_config()
     d = device.connect(cfg.get("device_serial"))
 
@@ -205,6 +220,8 @@ def main():
                 print(f"No pude extraer ninguna de: {', '.join(pending)}")
                 break
             export.save(results, lg or "liga")
+            from sam import respaldo
+            respaldo.close(lg)
             missing = sum(1 for r in results if not r["username"])
             print(f"Listo {lg or ''}: {len(results)} filas, {missing} sin username.  {datetime.now():%H:%M:%S}")
             done.append(lg)

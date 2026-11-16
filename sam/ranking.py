@@ -11,6 +11,7 @@ import re
 import xml.etree.ElementTree as ET
 
 from .device import dump_screen, sleep
+from . import respaldo
 from .guard import NotInTikTok
 
 BOUNDS_RE = re.compile(r"\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]")
@@ -405,6 +406,19 @@ def _scrape(d, cfg, league, results):
         print(f"== Extrayendo liga {cur} ==")
     seen, attempts, got_users = set(), {}, {}
     stale_scrolls = 0
+    if not league:
+        try:
+            LAST_LEAGUE = current_league(d)
+        except Exception:
+            pass
+    previas = respaldo.load(LAST_LEAGUE)
+    if previas:
+        print(f"Retomando {LAST_LEAGUE or 'liga'}: ya hay {len(previas)} usuarios guardados de antes, sigo desde ahi.")
+        for p in previas:
+            results.append(p)
+            seen.add(p["puesto"])
+            if p["username"]:
+                got_users[p["username"]] = p["puesto"]
     select_league_tab(d)
     scroll_to_top(d)
 
@@ -466,7 +480,9 @@ def _scrape(d, cfg, league, results):
             if not username:
                 dump_screen(d, f"sin_username_{r['puesto']}")
             r["username"] = username or ""
-            results.append({k: r[k] for k in ("puesto", "nombre_visible", "username", "puntos")})
+            fila = {k: r[k] for k in ("puesto", "nombre_visible", "username", "puntos")}
+            results.append(fila)
+            respaldo.append(LAST_LEAGUE, fila)
             print(f"[{len(results)}/{target}] {r['puesto']:>3}. {r['nombre_visible']!r} -> @{username}  [{state}]")
             if len(results) >= target or lost_list or state == "unknown":
                 break
