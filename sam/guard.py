@@ -28,11 +28,32 @@ def in_call(d):
     return any(s != "0" for s in CALL_RE.findall(out))
 
 
-def _foreground(d):
+TOP_RE = re.compile(r"(?:topResumedActivity|mResumedActivity|ResumedActivity|mCurrentFocus|mFocusedApp)[=:].*?\s([\w.]+)/([\w.$]+)")
+
+
+def current_app(d):
+    """App y activity realmente al frente. app_current() de uiautomator2 se confunde en
+    algunos celulares (p. ej. Honor) cuando otra app tiene una ventana en segundo plano."""
+    for cmd in ("dumpsys activity activities | grep -E 'topResumedActivity|ResumedActivity'",
+                "dumpsys window | grep -E 'mCurrentFocus|mFocusedApp'"):
+        try:
+            out = d.shell(cmd).output
+        except Exception:
+            continue
+        m = TOP_RE.search(out)
+        if m:
+            pkg, act = m.group(1), m.group(2)
+            if act.startswith("."):
+                act = pkg + act
+            return {"package": pkg, "activity": act}
     try:
-        return d.app_current().get("package")
+        return d.app_current()
     except Exception:
-        return None
+        return {}
+
+
+def _foreground(d):
+    return (current_app(d) or {}).get("package")
 
 
 def _overlay_at(d, x, y):
@@ -67,6 +88,9 @@ class SafeDevice:
 
     def __getattr__(self, name):
         return getattr(self._d, name)
+
+    def app_current(self):
+        return current_app(self._d)
 
     def ensure_tiktok(self):
         start = time.time()

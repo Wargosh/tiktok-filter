@@ -17,6 +17,26 @@ BOUNDS_RE = re.compile(r"\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]")
 FOLLOWERS_RE = re.compile(r"(followers|seguidores)", re.I)
 
 
+# Coordenadas calibradas en un Redmi 1080x2400; se escalan al tamano real de la pantalla.
+SCREEN_W, SCREEN_H = 1080, 2400
+
+
+def _set_screen(d):
+    global SCREEN_W, SCREEN_H
+    try:
+        SCREEN_W, SCREEN_H = d.window_size()
+    except Exception:
+        pass
+
+
+def _x(v):
+    return int(v * SCREEN_W / 1080)
+
+
+def _y(v):
+    return int(v * SCREEN_H / 2400)
+
+
 def _bounds(node):
     m = BOUNDS_RE.match(node.attrib.get("bounds", ""))
     return tuple(map(int, m.groups())) if m else (0, 0, 0, 0)
@@ -36,7 +56,7 @@ def _ranking_list(root):
         if n.attrib.get("scrollable") == "true" and "RecyclerView" in n.attrib.get("class", ""):
             # la lista del ranking esta en una hoja (arranca abajo); el feed de LIVEs
             # tambien es un RecyclerView a pantalla completa y no cuenta
-            if _bounds(n)[1] < 400:
+            if _bounds(n)[1] < _y(400):
                 continue
             if any(_rid(c) == "user_name" for c in n.iter("node")):
                 return n
@@ -94,7 +114,7 @@ DAILY_PILL_RE = re.compile(r"daily|diari|\bno\.|n[uú]m\.|league|liga", re.I)
 def _ranking_entrance(root):
     """Pastilla del ranking. Prefiere la de liga ('Daily No. X' / 'Num. X' / 'League X');
     si no hay, devuelve la pastilla generica (Popular LIVE, Gaming Ranking...)."""
-    daily = _find(root, lambda n: _bounds(n)[1] < 400 and n.attrib.get("text")
+    daily = _find(root, lambda n: _bounds(n)[1] < _y(400) and n.attrib.get("text")
                   and DAILY_PILL_RE.search(n.attrib.get("text", ""))
                   and n.attrib.get("package") == "com.zhiliaoapp.musically")
     return daily if daily is not None else _find(root, lambda n: _rid(n) == "tv_ranking_entrance_text")
@@ -102,7 +122,7 @@ def _ranking_entrance(root):
 
 def _host_block(root):
     """Bloque del anfitrion arriba a la izquierda del LIVE (contiene user_name)."""
-    name = _find(root, lambda n: _rid(n) == "user_name" and _bounds(n)[1] < 400)
+    name = _find(root, lambda n: _rid(n) == "user_name" and _bounds(n)[1] < _y(400))
     return name
 
 
@@ -153,8 +173,8 @@ def _close_sheet(d):
         return True
     top = _bounds(lst)[1]
     # arrastrar la hoja hacia abajo (tocar el video puede sacar del LIVE)
-    for _ in range(2 if top - 150 >= 250 else 0):
-        d.swipe(540, top - 150, 540, 2300, duration=0.3)
+    for _ in range(2 if top - _y(150) >= _y(250) else 0):
+        d.swipe(_x(540), top - _y(150), _x(540), _y(2300), duration=0.3)
         if _gone(3.0):
             return True
     if _ranking_list(_tree(d)) is not None and _in_live(d):
@@ -185,7 +205,14 @@ def ensure_in_live(d, tries=4):
         act = (d.app_current() or {}).get("activity", "")
         if "SplashActivity" in act or "MainActivity" in act:
             print("  [live] no estoy en un LIVE: entro por el icono LIVE de arriba a la izquierda")
-            d.click(*FEED_LIVE_ICON)
+            icon = None
+            try:
+                icon = _find(_tree(d), lambda n: (n.attrib.get("content-desc", "").strip().upper() == "LIVE"
+                                                  or n.attrib.get("text", "").strip().upper() == "LIVE")
+                             and _bounds(n)[0] < SCREEN_W // 3 and _bounds(n)[1] < SCREEN_H // 6)
+            except Exception:
+                pass
+            d.click(*(_center(icon) if icon is not None else (_x(FEED_LIVE_ICON[0]), _y(FEED_LIVE_ICON[1]))))
         else:
             print(f"  [live] pantalla inesperada ({act.split('.')[-1]}): atras")
             d.press("back")
@@ -202,7 +229,7 @@ def _host_sig(d):
         root = _tree(d)
     except Exception:
         return None
-    host = _find(root, lambda n: _rid(n) == "user_name" and _bounds(n)[1] < 280)
+    host = _find(root, lambda n: _rid(n) == "user_name" and _bounds(n)[1] < _y(280))
     return host.attrib.get("text", "").strip() or None if host is not None else None
 
 
@@ -213,6 +240,7 @@ def _targets(target):
 
 
 def find_league(d, target, max_lives=80):
+    _set_screen(d)
     """Desde un LIVE, pasa de LIVE en LIVE hasta encontrar uno cuya liga este en `target`
     (una liga o varias: 'C5' / 'C5,C4' / {'C5','C4'}). Deja abierto su ranking en la
     pestana de liga y devuelve la liga encontrada (o None)."""
@@ -266,7 +294,7 @@ def find_league(d, target, max_lives=80):
             if not ensure_in_live(d):
                 return False
             before = _host_sig(d)
-        d.swipe(540, 1700, 540, 500, duration=0.3)
+        d.swipe(_x(540), _y(1700), _x(540), _y(500), duration=0.3)
         opened_here = False
         sleep(3.0)
         if before and _host_sig(d) == before:
@@ -351,6 +379,7 @@ LAST_LEAGUE = None
 
 
 def scrape(d, cfg, league=None):
+    _set_screen(d)
     """Envuelve _scrape: si se pierde TikTok sin poder volver, devuelve lo ya extraido."""
     results = []
     try:
