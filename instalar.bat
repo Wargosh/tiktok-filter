@@ -14,16 +14,22 @@ if exist "python\python.exe" (
   if not exist config.json copy config.example.json config.json >nul
   goto probar
 )
-REM 1) Python
+REM 1) Python real (el alias de la Microsoft Store no sirve: se prueba ejecutandolo)
 set "PY="
-where py >nul 2>nul && set "PY=py -3"
-if not defined PY ( where python >nul 2>nul && set "PY=python" )
-if not defined PY (
-  echo [X] No encontre Python. Instala Python 3.10 o superior desde https://www.python.org/downloads/
-  echo     y marca "Add python.exe to PATH". Luego vuelve a ejecutar este instalador.
-  pause
-  exit /b 1
-)
+py -3 -c "import sys" >nul 2>nul && set "PY=py -3"
+if not defined PY ( python -c "import sys" >nul 2>nul && set "PY=python" )
+
+if defined PY goto conpython
+REM Sin Python: descargo uno portable dentro del proyecto (carpeta python\)
+echo No hay Python instalado. Descargo Python portable en la carpeta python\ ...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $v='3.13.9'; Invoke-WebRequest \"https://www.python.org/ftp/python/$v/python-$v-embed-amd64.zip\" -OutFile py.zip; Expand-Archive py.zip -DestinationPath python -Force; Remove-Item py.zip; $p=Get-ChildItem python -Filter 'python*._pth' | Select -First 1; $l=(Get-Content $p.FullName) -replace '^#\s*import site','import site'; $l+='Lib\site-packages'; $l+='..'; Set-Content $p.FullName $l; Invoke-WebRequest https://bootstrap.pypa.io/get-pip.py -OutFile get-pip.py"
+if not exist "python\python.exe" ( echo [X] No pude descargar Python. Revisa internet o usa el paquete tiktok-filter-portable.zip & pause & exit /b 1 )
+"python\python.exe" get-pip.py --no-warn-script-location || ( echo [X] Fallo instalar pip & pause & exit /b 1 )
+del get-pip.py
+"python\python.exe" -m pip install --no-warn-script-location -r requirements.txt || ( echo [X] Fallo pip install & pause & exit /b 1 )
+goto adb
+
+:conpython
 %PY% --version
 
 REM 2) Entorno virtual + dependencias
@@ -34,6 +40,7 @@ if not exist ".venv\Scripts\python.exe" (
 ".venv\Scripts\python.exe" -m pip install --upgrade pip
 ".venv\Scripts\python.exe" -m pip install -r requirements.txt || ( echo [X] Fallo pip install & pause & exit /b 1 )
 
+:adb
 REM 3) ADB (platform-tools): usa el del PATH o descarga uno dentro del proyecto
 where adb >nul 2>nul
 if errorlevel 1 (
