@@ -28,4 +28,6 @@ def dump_screen(d, label="screen"):
 
 
 def sleep(sec):
-    time.sleep(sec)
+    """Pausa con una pequena variacion al azar para no tener un ritmo de robot."""
+    import random
+    time.sleep(max(0.0, sec + random.uniform(0.0, 0.25)))

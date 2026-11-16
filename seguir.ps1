@@ -1,3 +1,5 @@
+﻿# Sin QuickEdit: un clic en la ventana no congela el seguimiento
+try { Add-Type -Name K -Namespace W -MemberDefinition '[DllImport("kernel32.dll")] public static extern System.IntPtr GetStdHandle(int h); [DllImport("kernel32.dll")] public static extern bool GetConsoleMode(System.IntPtr h, out uint m); [DllImport("kernel32.dll")] public static extern bool SetConsoleMode(System.IntPtr h, uint m);'; $hh=[W.K]::GetStdHandle(-10); $mm=0; if ([W.K]::GetConsoleMode($hh,[ref]$mm)) { [void][W.K]::SetConsoleMode($hh, ($mm -band (-bnot 0x40)) -bor 0x80) } } catch {}
 $host.UI.RawUI.WindowTitle = "tiktok-filter - seguimiento"
 [Console]::OutputEncoding = [Text.Encoding]::UTF8
 Set-Location (Join-Path $PSScriptRoot "logs")

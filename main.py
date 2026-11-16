@@ -38,6 +38,23 @@ class _Tee:
         self.f.flush()
 
 
+def _no_quickedit():
+    """En Windows, un clic dentro de la consola activa el 'modo seleccion' y congela el
+    programa al imprimir. Se desactiva ese modo (QuickEdit) en esta ventana."""
+    if os.name != "nt":
+        return
+    try:
+        import ctypes
+        k = ctypes.windll.kernel32
+        h = k.GetStdHandle(-10)  # STD_INPUT_HANDLE
+        mode = ctypes.c_uint32()
+        if k.GetConsoleMode(h, ctypes.byref(mode)):
+            ENABLE_QUICK_EDIT, ENABLE_EXTENDED_FLAGS = 0x0040, 0x0080
+            k.SetConsoleMode(h, (mode.value & ~ENABLE_QUICK_EDIT) | ENABLE_EXTENDED_FLAGS)
+    except Exception:
+        pass
+
+
 _LOCK = None
 
 
@@ -126,6 +143,7 @@ def main():
     except Exception:
         pass
     if cmd == "run":
+        _no_quickedit()
         if not _single_instance():
             print("Ya hay otra extraccion corriendo con este celular. Cierra esa ventana")
             print("o espera a que termine antes de abrir otra.")

@@ -138,8 +138,8 @@ def _wait_state(d, timeout=6.0):
             return "list", root
         if _ranking_entrance(root) is not None and _ranking_list(root) is None and waited > 2.0:
             return "live", root
-        sleep(0.5)
-        waited += 0.5
+        sleep(0.3)
+        waited += 0.3
     return "unknown", root
 
 
@@ -341,12 +341,12 @@ def _username_from_live(d, root):
     if host is None:
         return None
     d.click(*_center(host))
-    sleep(1.5)
+    sleep(0.7)
     state, root2 = _wait_state(d, timeout=4)
     username = _card_username(root2) if state == "card" else None
     if state == "card":
         d.press("back")
-        sleep(1.0)
+        sleep(0.5)
     return username
 
 
@@ -356,8 +356,8 @@ def _wait_card_closed(d, timeout=4.0):
     while waited < timeout:
         if not _card_username(_tree(d)):
             return True
-        sleep(0.5)
-        waited += 0.5
+        sleep(0.3)
+        waited += 0.3
     return False
 
 
