@@ -75,8 +75,8 @@ def _rows(root):
         name = next((t for t, r, _ in texts if r == "user_name"), None)
         if name is None:
             continue
-        pos = next((t for t, r, b in texts if t.strip().isdigit() and b[0] < 150), "")
-        score = next((t for t, r, b in texts if b[0] > 850 and t.strip()), "")
+        pos = next((t for t, r, b in texts if t.strip().isdigit() and b[0] < _x(150)), "")
+        score = next((t for t, r, b in texts if b[0] > _x(850) and t.strip()), "")
         x1, y1, x2, y2 = _bounds(row)
         # solo filas completamente dentro de la lista visible
         if y1 < lb[1] or y2 > lb[3]:
@@ -102,7 +102,7 @@ def _card_username(root):
         return None
     ftop = _bounds(fol)[1]
     cands = [n for n in root.iter("node")
-             if _rid(n) == "user_name" and ftop - 350 < _bounds(n)[3] <= ftop]
+             if _rid(n) == "user_name" and ftop - _y(350) < _bounds(n)[3] <= ftop]
     if not cands:
         return None
     return cands[-1].attrib.get("text", "").strip().lstrip("@") or None
@@ -151,7 +151,7 @@ def current_league(d=None, root=None):
     root = root if root is not None else _tree(d)
     for n in root.iter("node"):
         m = LEAGUE_RE.search(n.attrib.get("text", ""))
-        if m and 900 < _bounds(n)[1] < 1300:
+        if m and _y(900) < _bounds(n)[1] < _y(1300):
             return m.group(1).upper()
     return None
 
@@ -310,7 +310,7 @@ def select_league_tab(d):
     """En la hoja de ranking, toca la pestana 'League ...' si existe."""
     root = _tree(d)
     tab = _find(root, lambda n: n.attrib.get("text", "").strip().startswith(("League", "Liga"))
-                and 900 < _bounds(n)[1] < 1300)
+                and _y(900) < _bounds(n)[1] < _y(1300))
     if tab is not None:
         d.click(*_center(tab))
         sleep(1.5)
