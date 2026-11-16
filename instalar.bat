@@ -7,6 +7,13 @@ echo === tiktok-filter: instalacion ===
 echo Carpeta: %CD%
 echo.
 
+REM 0) Paquete portable: ya trae Python, librerias y ADB. No necesita internet.
+if exist "python\python.exe" (
+  echo Paquete portable detectado: Python, librerias y ADB incluidos.
+  set "PATH=%CD%\tools\platform-tools;%PATH%"
+  if not exist config.json copy config.example.json config.json >nul
+  goto probar
+)
 REM 1) Python
 set "PY="
 where py >nul 2>nul && set "PY=py -3"
@@ -43,10 +50,13 @@ REM 4) Configuracion
 if not exist config.json copy config.example.json config.json >nul
 
 echo.
+:probar
 echo === Instalado. Conecta el celular por USB y acepta "Permitir depuracion USB" ===
 adb devices
 echo Comprobando conexion con el celular...
-".venv\Scripts\python.exe" main.py check
+set "PY=.venv\Scripts\python.exe"
+if exist "python\python.exe" set "PY=python\python.exe"
+"%PY%" main.py check
 echo.
 echo Para extraer:  extraer.bat --liga C5,C4,C3,D1
 pause
