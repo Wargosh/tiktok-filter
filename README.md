@@ -59,6 +59,9 @@ La primera vez, `uiautomator2` instala sola una app auxiliar en el celular.
 
 ## 4. Uso
 
+**Lo más fácil:** doble clic en `extraer.bat`. Te pregunta las ligas: escríbelas separadas solo por comas, sin espacios (por ejemplo `C5,C4,C3`). Si alguien escribe minúsculas, espacios u otros separadores (`c5; c4 d1`), se corrige solo a `C5,C4,D1`; lo que no sea una liga válida (A1-A3, B1-B5, C1-C5, D1-D5) se vuelve a pedir. Enter vacío usa el ranking que ya esté abierto en el cel. Cada liga se guarda en su propio txt y Excel en `output`, y al final se abre esa carpeta.
+
+
 ### 4.1 Dejar abierto el ranking (manual)
 1. Abrir TikTok y entrar a cualquier **LIVE**.
 2. Tocar la pastilla de arriba a la izquierda, debajo del nombre del anfitrión, que dice

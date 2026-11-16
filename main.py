@@ -112,7 +112,16 @@ def main():
             return
         # --liga acepta varias separadas por coma: se extrae cada una en cuanto
         # aparece un LIVE de cualquiera de ellas, hasta completar todas.
-        pending = [x.strip().upper() for x in league.split(",") if x.strip()] if league else [None]
+        if league:
+            from sam.ligas import normalize
+            pending, bad = normalize(league)
+            if bad:
+                print(f"Ignoro ligas no validas: {', '.join(bad)} (validas: A1-A3, B1-B5, C1-C5, D1-D5)")
+            if not pending:
+                print("No hay ninguna liga valida para buscar.")
+                return
+        else:
+            pending = [None]
         done = []
         while pending:
             want = ",".join(pending) if pending[0] else None
