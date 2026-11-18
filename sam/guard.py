@@ -21,11 +21,23 @@ class NotInTikTok(Exception):
 
 
 def in_call(d):
-    try:
-        out = d.shell("dumpsys telephony.registry", timeout=10).output
-    except Exception:
-        return False
-    return any(s != "0" for s in CALL_RE.findall(out))
+    """True si hay una llamada sonando o en curso. El resultado se reutiliza 1.5s:
+    dumpsys tarda y, en la misma fila, el toque y el 'atras' caen dentro de esa ventana."""
+    now = time.time()
+    hit = getattr(in_call, "_hit", None)
+    if hit and now - hit[0] < 1.5:
+        return hit[1]
+    result = False
+    for cmd in ("dumpsys telephony.registry | grep mCallState", "dumpsys telephony.registry"):
+        try:
+            out = d.shell(cmd, timeout=6).output
+        except Exception:
+            continue
+        if out and "mCallState=" in out:
+            result = any(s != "0" for s in CALL_RE.findall(out))
+            break
+    in_call._hit = (now, result)
+    return result
 
 
 TOP_RE = re.compile(r"(?:topResumedActivity|mResumedActivity|ResumedActivity|mCurrentFocus|mFocusedApp)[=:].*?\s([\w.]+)/([\w.$]+)")
@@ -33,9 +45,10 @@ TOP_RE = re.compile(r"(?:topResumedActivity|mResumedActivity|ResumedActivity|mCu
 
 def current_app(d):
     """App y activity realmente al frente. app_current() de uiautomator2 se confunde en
-    algunos celulares (p. ej. Honor) cuando otra app tiene una ventana en segundo plano."""
-    for cmd in ("dumpsys activity activities | grep -E 'topResumedActivity|ResumedActivity'",
-                "dumpsys window | grep -E 'mCurrentFocus|mFocusedApp'"):
+    algunos celulares (p. ej. Honor) cuando otra app tiene una ventana en segundo plano.
+    Primero la consulta corta (ventana enfocada); el volcado de activities es el respaldo."""
+    for cmd in ("dumpsys window | grep -E 'mCurrentFocus|mFocusedApp'",
+                "dumpsys activity activities | grep -E 'topResumedActivity|ResumedActivity'"):
         try:
             out = d.shell(cmd, timeout=10).output
         except Exception:
@@ -85,6 +98,8 @@ class SafeDevice:
         self._d = d
         self.max_wait_sec = max_wait_sec
         self.recovered = False   # se pone True si hubo que volver a TikTok
+        self._front_until = 0.0    # hasta cuando damos por bueno que TikTok sigue al frente
+        self._overlay_until = 0.0  # hasta cuando damos por bueno que no hay nada ajeno encima
 
     def __getattr__(self, name):
         return getattr(self._d, name)
@@ -97,19 +112,26 @@ class SafeDevice:
         warned = False
         while time.time() - start < self.max_wait_sec:
             if in_call(self._d):
+                self._front_until = 0.0
                 if not warned:
                     print("  [guard] Llamada en curso: espero sin tocar nada...")
                     warned = True
                 time.sleep(5)
                 continue
+            # Acabamos de comprobarlo: el 'atras' de la misma fila no vuelve a preguntar.
+            if time.time() < self._front_until:
+                return
             pkg = _foreground(self._d)
             if pkg == TIKTOK_PKG:
+                self._front_until = time.time() + 2.5
                 if warned:
                     print("  [guard] De vuelta en TikTok.")
                 return
             print(f"  [guard] En primer plano esta '{pkg}', no TikTok. Vuelvo a TikTok...")
             warned = True
             self.recovered = True
+            self._front_until = 0.0
+            self._overlay_until = 0.0
             time.sleep(3)   # por si era algo pasajero
             if _foreground(self._d) != TIKTOK_PKG and not in_call(self._d):
                 self._d.app_start(TIKTOK_PKG)   # trae TikTok al frente sin reiniciarlo
@@ -117,14 +139,18 @@ class SafeDevice:
         raise NotInTikTok(f"No pude volver a TikTok en {self.max_wait_sec}s.")
 
     def _wait_clear(self, x, y, timeout=20):
+        if time.time() < self._overlay_until:
+            return True
         start = time.time()
         while _overlay_at(self._d, x, y):
+            self._overlay_until = 0.0
             if time.time() - start > timeout:
                 print("  [guard] Algo sigue tapando la pantalla; continuo con precaucion.")
                 return False
             print("  [guard] Notificacion encima: espero a que se quite...")
             time.sleep(3)
             self.ensure_tiktok()
+        self._overlay_until = time.time() + 4.0
         return True
 
     def click(self, x, y):

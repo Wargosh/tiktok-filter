@@ -128,20 +128,26 @@ def _host_block(root):
 
 
 def _wait_state(d, timeout=6.0):
-    """Espera hasta reconocer la pantalla: 'card', 'list' o 'live'."""
-    waited = 0.0
+    """Espera hasta reconocer la pantalla: 'card', 'list' o 'live'.
+
+    Devuelve 'card' en cuanto el @ es visible. 'list' y 'live' solo se aceptan
+    pasado un rato, para no confundir la animacion del toque con un fallo.
+    """
+    import time
+    start = time.time()
     root = None
-    while waited <= timeout:
+    while True:
+        elapsed = time.time() - start
         root = _tree(d)
         if _card_username(root):
             return "card", root
-        if _ranking_list(root) is not None and waited > 2.5:
+        if _ranking_list(root) is not None and elapsed > 2.2:
             return "list", root
-        if _ranking_entrance(root) is not None and _ranking_list(root) is None and waited > 2.0:
+        if _ranking_entrance(root) is not None and _ranking_list(root) is None and elapsed > 1.6:
             return "live", root
-        sleep(0.3)
-        waited += 0.3
-    return "unknown", root
+        if elapsed >= timeout:
+            return "unknown", root
+        sleep(0.12, jitter=False)
 
 
 LEAGUE_RE = re.compile(r"(?:League|Liga)\s*([A-Z]\d)", re.I)
@@ -297,7 +303,7 @@ def find_league(d, target, max_lives=80):
             before = _host_sig(d)
         d.swipe(_x(540), _y(1700), _x(540), _y(500), duration=0.3)
         opened_here = False
-        sleep(3.0)
+        _wait_new_live(d, before)
         if before and _host_sig(d) == before:
             # no cambio de LIVE: hay alguna hoja/panel encima que se come el deslizar
             print("  [aviso] el LIVE no cambio; cierro lo que este abierto con 'atras'")
@@ -314,7 +320,7 @@ def select_league_tab(d):
                 and _y(900) < _bounds(n)[1] < _y(1300))
     if tab is not None:
         d.click(*_center(tab))
-        sleep(1.5)
+        sleep(0.9)
         return True
     return False
 
@@ -342,24 +348,40 @@ def _username_from_live(d, root):
     if host is None:
         return None
     d.click(*_center(host))
-    sleep(0.7)
+    sleep(0.2, jitter=False)
     state, root2 = _wait_state(d, timeout=4)
     username = _card_username(root2) if state == "card" else None
     if state == "card":
         d.press("back")
-        sleep(0.5)
+        sleep(0.15, jitter=False)
+        _wait_card_closed(d)
     return username
 
 
-def _wait_card_closed(d, timeout=4.0):
+def _wait_card_closed(d, timeout=3.0):
     """Espera a que la tarjeta se cierre, para no leer la tarjeta anterior en la fila siguiente."""
-    waited = 0.0
-    while waited < timeout:
+    import time
+    start = time.time()
+    while True:
         if not _card_username(_tree(d)):
             return True
-        sleep(0.3)
-        waited += 0.3
-    return False
+        if time.time() - start >= timeout:
+            return False
+        sleep(0.12, jitter=False)
+
+
+def _wait_new_live(d, before, timeout=2.2):
+    """Tras pasar al siguiente LIVE, sigue en cuanto cambia el anfitrion."""
+    import time
+    end = time.time() + timeout
+    sleep(0.35, jitter=False)
+    while time.time() < end:
+        now = _host_sig(d)
+        if before and now and now != before:
+            return
+        if not before and now:
+            return
+        sleep(0.28, jitter=False)
 
 
 def scroll_to_top(d, max_swipes=40):
@@ -406,6 +428,7 @@ def _scrape(d, cfg, league, results):
         print(f"== Extrayendo liga {cur} ==")
     seen, attempts, got_users = set(), {}, {}
     stale_scrolls = 0
+    up_tries = 0
     if not league:
         try:
             LAST_LEAGUE = current_league(d)
@@ -415,10 +438,11 @@ def _scrape(d, cfg, league, results):
     if previas:
         print(f"Retomando {LAST_LEAGUE or 'liga'}: ya hay {len(previas)} usuarios guardados de antes, sigo desde ahi.")
         for p in previas:
+            if not p.get("username"):
+                continue
             results.append(p)
             seen.add(p["puesto"])
-            if p["username"]:
-                got_users[p["username"]] = p["puesto"]
+            got_users[p["username"]] = p["puesto"]
     select_league_tab(d)
     scroll_to_top(d)
 
@@ -434,6 +458,19 @@ def _scrape(d, cfg, league, results):
             break
 
         rows = [r for r in rows if r["puesto"]]
+        # Tras entrar a un LIVE, TikTok a veces reabre la lista mucho mas abajo
+        # y se saltan puestos. Si falta uno anterior, se sube hasta verlo.
+        missing_n = next((i for i in range(1, target + 1) if str(i) not in seen), None)
+        vis_pos = [int(r["puesto"]) for r in rows if r["puesto"].isdigit()]
+        if missing_n and vis_pos and min(vis_pos) > missing_n and up_tries < 15:
+            up_tries += 1
+            print(f"  Lista en el puesto {min(vis_pos)}, falta el {missing_n}: subo")
+            x = (lb[0] + lb[2]) // 2
+            d.swipe(x, lb[1] + 70, x, lb[3] - 70, duration=0.28)
+            sleep(0.45)
+            stale_scrolls = 0
+            continue
+        up_tries = 0
         # el puesto es unico; el nombre visible puede variar entre lecturas (emojis)
         new_rows = [r for r in rows if r["puesto"] not in seen]
         last_pos = max((int(r["puesto"]) for r in rows), default=0)
@@ -448,13 +485,15 @@ def _scrape(d, cfg, league, results):
         state = "list"
         for r in new_rows:
             d.click(*r["tap"])
-            sleep(cfg["tap_delay_sec"])
+            # Pausa corta y luego se sondea: antes se esperaba tap_delay entero
+            # aunque la tarjeta ya estuviera en pantalla.
+            sleep(min(0.25, float(cfg["tap_delay_sec"])), jitter=False)
             state, root = _wait_state(d)
             username = None
             if state == "card":
                 username = _card_username(root)
                 d.press("back")
-                sleep(cfg["back_delay_sec"])
+                sleep(min(0.15, float(cfg["back_delay_sec"])), jitter=False)
                 _wait_card_closed(d)
             elif state == "live":
                 username = _username_from_live(d, root)

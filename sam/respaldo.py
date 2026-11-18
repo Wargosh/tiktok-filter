@@ -38,7 +38,16 @@ def load(league):
         if len(parts) >= 3 and parts[0].strip():
             parts += [""] * (len(CAMPOS) - len(parts))
             rows.append(dict(zip(CAMPOS, parts)))
-    return rows
+    # Si un puesto se reintento, se queda la fila que si tiene username.
+    by_pos, order = {}, []
+    for row in rows:
+        pos = row["puesto"]
+        if pos not in by_pos:
+            order.append(pos)
+            by_pos[pos] = row
+        elif row.get("username") and not by_pos[pos].get("username"):
+            by_pos[pos] = row
+    return [by_pos[p] for p in order]
 
 
 def append(league, row):

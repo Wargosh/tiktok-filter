@@ -27,7 +27,9 @@ def dump_screen(d, label="screen"):
     return png, xml
 
 
-def sleep(sec):
-    """Pausa con una pequena variacion al azar para no tener un ritmo de robot."""
+def sleep(sec, jitter=True):
+    """Pausa. La variacion al azar solo aplica a esperas largas: en los sondeos
+    cortos (cada fila) sumaba mas tiempo del que tardaba la pantalla en cambiar."""
     import random
-    time.sleep(max(0.0, sec + random.uniform(0.0, 0.25)))
+    extra = random.uniform(0.0, 0.08) if jitter and sec >= 0.5 else 0.0
+    time.sleep(max(0.0, sec + extra))

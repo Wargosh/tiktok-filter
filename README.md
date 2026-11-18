@@ -141,14 +141,14 @@ Por eso el script solo usa ids estables y textos:
 |---|---|---|
 | `device_serial` | `null` | Serial ADB si hay varios celulares conectados |
 | `target_count` | `100` | Cuántos puestos sacar |
-| `tap_delay_sec` | `1.5` | Espera después de tocar una fila |
-| `back_delay_sec` | `1.2` | Espera después de cerrar la tarjeta |
-| `scroll_delay_sec` | `1.2` | Espera después de cada scroll |
+| `tap_delay_sec` | `0.25` | Pausa inicial tras tocar una fila (tope 0.25 s). Luego mira la pantalla y sigue en cuanto aparece la tarjeta |
+| `back_delay_sec` | `0.15` | Pausa inicial tras cerrar la tarjeta (tope 0.15 s). Sigue en cuanto la tarjeta desaparece |
+| `scroll_delay_sec` | `0.55` | Espera después de cada scroll |
 | `max_lives_search` | `80` | LIVEs que prueba al buscar una liga |
 | `max_wait_outside_sec` | `900` | Cuánto espera (s) a que TikTok vuelva al frente antes de rendirse y guardar lo extraído |
 
 ### Protección contra llamadas y notificaciones (`sam/guard.py`)
-Todos los toques, swipes y "atrás" pasan por `SafeDevice`, que antes de cada acción:
+Todos los toques, swipes y "atrás" pasan por `SafeDevice`. Si TikTok acaba de comprobarse, el "atrás" de la misma fila no repite la consulta, y el chequeo de notificaciones se reutiliza unos segundos. Antes de actuar:
 1. Revisa si hay una **llamada** sonando o en curso (`dumpsys telephony.registry`). Si la hay, espera sin tocar nada (así nunca contesta ni cuelga).
 2. Revisa que la app al frente sea **TikTok** (`com.zhiliaoapp.musically`). Si no, espera 3 s y la vuelve a abrir con `app_start` (sin reiniciarla).
 3. Revisa que el punto a tocar no esté tapado por un elemento de **otra app** (notificación flotante, diálogo). Si lo está, espera a que desaparezca; si sigue después de 20 s, no toca.

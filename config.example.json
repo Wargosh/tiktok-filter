@@ -1,9 +1,9 @@
 {
   "device_serial": null,
   "target_count": 100,
-  "tap_delay_sec": 0.7,
-  "back_delay_sec": 0.5,
-  "scroll_delay_sec": 0.8,
+  "tap_delay_sec": 0.25,
+  "back_delay_sec": 0.15,
+  "scroll_delay_sec": 0.55,
   "max_lives_search": 80,
   "max_wait_outside_sec": 900
 }
